@@ -361,7 +361,7 @@ class MemoryOptimizedReplayBuffer(object):
             Max number of transitions to store in the buffer. When the buffer
             overflows the old memories are dropped.
         frame_history_len: int
-            Number of memories to be retried for each observation.
+            Number of memories to be retrived for each observation.
         """
         self.lander = lander
 
