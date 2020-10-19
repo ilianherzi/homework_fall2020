@@ -73,14 +73,17 @@ class DQNCritic(BaseCritic):
             # In double Q-learning, the best action is selected using the Q-network that
             # is being updated, but the Q-value for this action is obtained from the
             # target Q-network. See page 5 of https://arxiv.org/pdf/1509.06461.pdf for more details.
-            q_tp1, _ = self.q_net(next_ob_no).max(dim=1)
+            q_tp1 = torch.gather(qa_tp1_values,
+                                 1, 
+                                 self.q_net(next_ob_no).argmax(dim=1).unsqueeze(1)).squeeze(1)
         else:
             q_tp1, _ = qa_tp1_values.max(dim=1)
 
         # TODO compute targets for minimizing Bellman error
         # HINT: as you saw in lecture, this would be:
             #currentReward + self.gamma * qValuesOfNextTimestep * (not terminal)
-        target = reward_n + self.gamma * q_tp1
+        target = reward_n + self.gamma * q_tp1 * (1.-terminal_n) # only consider rewards from states that did not terminate
+
         target = target.detach()
 
         assert q_t_values.shape == target.shape

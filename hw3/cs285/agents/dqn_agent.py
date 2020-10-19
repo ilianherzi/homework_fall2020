@@ -7,7 +7,6 @@ from cs285.critics.dqn_critic import DQNCritic
 
 class DQNAgent(object):
     def __init__(self, env, agent_params):
-
         self.env = env
         self.agent_params = agent_params
         self.batch_size = agent_params['batch_size']
