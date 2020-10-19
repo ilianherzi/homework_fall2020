@@ -31,13 +31,13 @@ class Q_Trainer(object):
 
     def run_training_loop(self):
         self.rl_trainer.run_training_loop(
-            self.agent_params['num_timesteps'],
+            self.agent_params['num_timesteps'] if not self.params['n_iter'] else self.params['n_iter'],
             collect_policy = self.rl_trainer.agent.actor,
             eval_policy = self.rl_trainer.agent.actor,
         )
 
 def main():
-
+    print('Running main script')
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -63,6 +63,8 @@ def main():
     parser.add_argument('--video_log_freq', type=int, default=-1)
 
     parser.add_argument('--save_params', action='store_true')
+
+    parser.add_argument('--n_iter', type=int, default=None)
 
     args = parser.parse_args()
 

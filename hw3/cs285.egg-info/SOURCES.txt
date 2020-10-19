@@ -24,6 +24,7 @@ cs285/infrastructure/logger.py
 cs285/infrastructure/pytorch_util.py
 cs285/infrastructure/replay_buffer.py
 cs285/infrastructure/rl_trainer.py
+cs285/infrastructure/rllib_trainer.py
 cs285/infrastructure/utils.py
 cs285/policies/MLP_policy.py
 cs285/policies/argmax_policy.py
