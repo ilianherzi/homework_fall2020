@@ -258,7 +258,7 @@ class RL_Trainer(object):
             print("running time %f" % time_since_start)
             logs["TimeSinceStart"] = time_since_start
 
-        logs.update(last_log)
+        logs.update(last_log) #'Training Loss': ptu.to_numpy(loss),
 
         sys.stdout.flush()
 
