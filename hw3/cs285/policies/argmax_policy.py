@@ -14,6 +14,6 @@ class ArgMaxPolicy(object):
         
         ## TODO return the action that maxinmizes the Q-value 
         # at the current observation as the output
-        actions = torch.argmax(self.critic(observation))
+        actions = np.argmax(self.critic.qa_values(observation), axis=1)
 
         return actions.squeeze()

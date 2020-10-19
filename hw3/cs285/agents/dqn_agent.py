@@ -47,12 +47,12 @@ class DQNAgent(object):
         # HINT: the replay buffer used here is `MemoryOptimizedReplayBuffer`
             # in dqn_utils.py
         self.replay_buffer_idx = self.replay_buffer.store_frame(self.last_obs)
-        self.replay_buffer.encode_recent_observation()
+        last_obs = self.replay_buffer.encode_recent_observation()
 
         eps = self.exploration.value(self.t)
 
         # TODO use epsilon greedy exploration when selecting action
-        perform_random_action = (np.random.random() <= eps) or self.t < self.learning_starts
+        perform_random_action = (np.random.random() < eps) or self.t < self.learning_starts
         if perform_random_action:
             # HINT: take random action 
                 # with probability eps (see np.random.random())
@@ -63,7 +63,7 @@ class DQNAgent(object):
                 # to deal with the partial observability of the environment. Get the most recent 
                 # `frame_history_len` observations using functionality from the replay buffer,
                 # and then use those observations as input to your actor. 
-            action = self.actor.get_action(self.replay_buffer.obs[self.replay_buffer_idx])
+            action = self.actor.get_action(last_obs)
         
         # TODO take a step in the environment using the action from the policy
         # HINT1: remember that self.last_obs must always point to the newest/latest observation
@@ -79,7 +79,8 @@ class DQNAgent(object):
 
         # TODO if taking this step resulted in done, reset the env (and the latest observation)
         if done:
-            self.env.reset()
+            start_obs = self.env.reset()
+            self.last_obs = start_obs
 
     def sample(self, batch_size):
         if self.replay_buffer.can_sample(self.batch_size):
@@ -99,7 +100,7 @@ class DQNAgent(object):
                 ob_no,
                 ac_na,
                 next_ob_no,
-                reward_n,
+                re_n,
                 terminal_n
             )
 
