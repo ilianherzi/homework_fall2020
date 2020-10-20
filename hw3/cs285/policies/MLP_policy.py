@@ -117,6 +117,19 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
 
 class MLPPolicyAC(MLPPolicy):
     def update(self, observations, actions, adv_n=None):
-        # TODO: update the policy and return the loss
-        loss = TODO
-        return loss.item()
+        def update(self, observations, actions, advantages, q_values=None):
+            observations = ptu.from_numpy(observations)
+            actions = ptu.from_numpy(actions)
+            advantages = ptu.from_numpy(advantages)
+
+            actions_log_prob = self(observations).log_prob(actions)
+            loss = -torch.sum(actions_log_prob * advantages) # why are we taking a cross entropy here? I guess this will select only the actions taken by the policy which are the ones of maximal prob
+
+            # TODO: optimize `loss` using `self.optimizer`
+            # HINT: remember to `zero_grad` first
+            self.optimizer.zero_grad()
+            loss.backward()
+            self.optimizer.step()
+
+    
+            return loss.item()

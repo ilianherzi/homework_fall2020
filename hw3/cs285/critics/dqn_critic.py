@@ -82,7 +82,7 @@ class DQNCritic(BaseCritic):
         # TODO compute targets for minimizing Bellman error
         # HINT: as you saw in lecture, this would be:
             #currentReward + self.gamma * qValuesOfNextTimestep * (not terminal)
-        target = reward_n + self.gamma * q_tp1 * (1-terminal_n) # only consider rewards from states that did not terminate
+        target = reward_n + self.gamma * q_tp1 * (1.-terminal_n) # only consider rewards from states that did not terminate
 
         target = target.detach()
 
