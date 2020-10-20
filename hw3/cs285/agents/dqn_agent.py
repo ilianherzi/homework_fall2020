@@ -2,6 +2,7 @@ import numpy as np
 
 from cs285.infrastructure.dqn_utils import MemoryOptimizedReplayBuffer, PiecewiseSchedule
 from cs285.policies.argmax_policy import ArgMaxPolicy
+from cs285.policies.topk_policy import TopkPolicy
 from cs285.critics.dqn_critic import DQNCritic
 
 
@@ -23,7 +24,7 @@ class DQNAgent(object):
         self.optimizer_spec = agent_params['optimizer_spec']
 
         self.critic = DQNCritic(agent_params, self.optimizer_spec)
-        self.actor = ArgMaxPolicy(self.critic)
+        self.actor = ArgMaxPolicy(self.critic) if 'topk' not in agent_params['policy']  else TopkPolicy(self.critic, agent_params['topk_policy'])
 
         lander = agent_params['env_name'].startswith('LunarLander')
         self.replay_buffer = MemoryOptimizedReplayBuffer(
@@ -31,6 +32,9 @@ class DQNAgent(object):
         self.t = 0
         self.num_param_updates = 0
 
+        
+        
+        
     def add_to_replay_buffer(self, paths):
         pass
 

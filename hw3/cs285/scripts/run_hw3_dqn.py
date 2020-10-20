@@ -65,6 +65,8 @@ def main():
     parser.add_argument('--save_params', action='store_true')
 
     parser.add_argument('--n_iter', type=int, default=None)
+    parser.add_argument('--policy', type=str, default="argmax")
+    parser.add_argument('--topk_policy', type=int, default=None)
 
     args = parser.parse_args()
 

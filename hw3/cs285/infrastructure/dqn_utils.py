@@ -127,6 +127,14 @@ def atari_exploration_schedule(num_timesteps):
         ], outside_value=0.01
     )
 
+def atari_eps_exploration_schedule(num_timesteps, eps=1.0):
+    return PiecewiseSchedule(
+        [
+            (0, eps),
+            (1e6, eps * 1e-1),
+            (num_timesteps / 8, eps * 1e-2),
+        ], outside_value=eps * 1e-2
+    )
 
 def atari_ram_exploration_schedule(num_timesteps):
     return PiecewiseSchedule(
@@ -214,6 +222,8 @@ def linear_interpolation(l, r, alpha):
     return l + alpha * (r - l)
 
 
+
+
 class PiecewiseSchedule(object):
     def __init__(self, endpoints, interpolation=linear_interpolation, outside_value=None):
         """Piecewise schedule.
@@ -249,7 +259,14 @@ class PiecewiseSchedule(object):
         # t does not belong to any of the pieces, so doom.
         assert self._outside_value is not None
         return self._outside_value
-
+# class TopkSchedule(object):
+#     def __init__(self, schedule_timesteps, initial_p =1.0, final_p=.01):
+#         self.schedule_timesteps = schedule_timesteps
+#         self.initial_p=initial_p
+#         self.final_p = final_p
+        
+#     def value(self, t):
+#         fraction = min(float(t) / self.schedule_timesteps, 1.0))
 class LinearSchedule(object):
     def __init__(self, schedule_timesteps, final_p, initial_p=1.0):
         """Linear interpolation between initial_p and final_p over
