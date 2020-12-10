@@ -73,7 +73,7 @@ def sample_trajectory(env, policy, max_path_length, render=False, render_mode=('
                 time.sleep(env.model.opt.timestep)
         obs.append(ob)
         ac = policy.get_action(ob)
-        ac = ac[0]
+        #ac = ac[0]
         acs.append(ac)
         ob, rew, done, _ = env.step(ac)
         # add the observation after taking a step to next_obs
@@ -88,6 +88,11 @@ def sample_trajectory(env, policy, max_path_length, render=False, render_mode=('
         else:
             terminals.append(0)
     return Path(obs, image_obs, acs, rewards, next_obs, terminals)
+
+        # IMPORTANT CHANGE: Comment out the line: ac = ac[0], as Argmax Policy already returns a scalar
+
+    ####################################
+    ####################################
 
 def sample_trajectories(env, policy, min_timesteps_per_batch, max_path_length, render=False, render_mode=('rgb_array')):
 
@@ -105,6 +110,9 @@ def sample_trajectories(env, policy, min_timesteps_per_batch, max_path_length, r
 
     return paths, timesteps_this_batch
 
+
+    ####################################
+    ####################################
 def sample_n_trajectories(env, policy, ntraj, max_path_length, render=False, render_mode=('rgb_array')):
 
     paths = []
@@ -115,8 +123,9 @@ def sample_n_trajectories(env, policy, ntraj, max_path_length, render=False, ren
 
     return paths
 
-############################################
-############################################
+
+    ####################################
+    ####################################
 
 def Path(obs, image_obs, acs, rewards, next_obs, terminals):
     """

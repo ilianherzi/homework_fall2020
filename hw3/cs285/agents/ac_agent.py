@@ -6,8 +6,8 @@ from cs285.infrastructure.replay_buffer import ReplayBuffer
 from cs285.infrastructure.utils import *
 from cs285.policies.MLP_policy import MLPPolicyAC
 from .base_agent import BaseAgent
-
-
+from cs285.infrastructure import pytorch_util as ptu
+import torch
 class ACAgent(BaseAgent):
     def __init__(self, env, agent_params):
         super(ACAgent, self).__init__()
@@ -34,21 +34,29 @@ class ACAgent(BaseAgent):
         # TODO Implement the following pseudocode:
         # for agent_params['num_critic_updates_per_agent_update'] steps,
         #     update the critic
+        # ob_no = ptu.from_numpy(ob_no)
+        # ac_na = ptu.from_numpy(ac_na).to(torch.long)
+        # next_ob_no = ptu.from_numpy(next_ob_no)
+        # re_n = ptu.from_numpy(re_n)
+        # terminal_n = ptu.from_numpy(terminal_n)
         for _ in range(self.agent_params['num_critic_updates_per_agent_update']): 
-            critic_loss = self.critic.update(ob_no, ac_na, re_n, next_ob_no, terminal_ n)
-
+            critic_loss = self.critic.update(ob_no=ob_no, 
+                                             ac_na=ac_na, 
+                                             reward_n=re_n, 
+                                             next_ob_no=next_ob_no, 
+                                             terminal_n=terminal_n)
 
 
         # targets = re_n + self.gamma * self.critic(next_ob_no) * (1-terminal_n) 
         # pred = self.critic(ob_no)
         # #advantage = re_n + self.gamma * self.critic(next_ob_no) * (1-terminal_n)  - self.critic(ob_no)
         # advantage = targets - pred
-        advantage = self.estimate_advantage(ob_no, ac_na, re_n, next_ob_no, terminal_n)
+        advantage = self.estimate_advantage(ob_no, next_ob_no, re_n, terminal_n)
         
         # for agent_params['num_actor_updates_per_agent_update'] steps,
         #     update the actor
         for _ in range(self.agent_params['num_actor_updates_per_agent_update']):
-            actor_loss = self.actor.update(ob_no, self.actor(ob_no), adv_n=advantage)
+            actor_loss = self.actor.update(ob_no, ac_na, adv_n=advantage)
         
         
         loss = OrderedDict()
@@ -70,7 +78,7 @@ class ACAgent(BaseAgent):
         adv_n = value_targets - value_pred
 
         if self.standardize_advantages:
-            adv_n = (adv_n - np.mean(adv_n)) / (np.std(adv_n) + 1e-8)
+            adv_n = (adv_n - torch.mean(adv_n)) / (torch.std(adv_n) + 1e-8)
         return adv_n
 
     def add_to_replay_buffer(self, paths):

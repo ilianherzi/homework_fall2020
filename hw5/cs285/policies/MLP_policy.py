@@ -84,31 +84,46 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
 
     ##################################
 
+    # query the policy with observation(s) to get selected action(s)
     def get_action(self, obs: np.ndarray) -> np.ndarray:
         if len(obs.shape) > 1:
             observation = obs
         else:
             observation = obs[None]
-        observation = ptu.from_numpy(observation)
-        action_distribution = self(observation)
-        action = action_distribution.sample()  # don't bother with rsample
-        return ptu.to_numpy(action)
-    def forward(self, observation: torch.FloatTensor):
-        if self.discrete:
-            logits = self.logits_na(observation)
-            action_distribution = distributions.Categorical(logits=logits)
-            return action_distribution
-        else:
-            batch_mean = self.mean_net(observation)
-            scale_tril = torch.diag(torch.exp(self.logstd))
-            batch_dim = batch_mean.shape[0]
-            batch_scale_tril = scale_tril.repeat(batch_dim, 1, 1)
-            action_distribution = distributions.MultivariateNormal(
-                batch_mean,
-                scale_tril=batch_scale_tril,
-            )
-            return action_distribution
 
+        # TODO return the action that the policy prescribes
+        #print(torch.argmax(self(torch.from_numpy(observation).to(dtype=torch.float))).shape)
+        #print(ptu.to_numpy(self(torch.from_numpy(observation).to(dtype=torch.float))).shape)
+        return ptu.to_numpy(self(torch.from_numpy(observation).to(dtype=torch.float)))
+
+
+    ####################################
+    ####################################
+
+    # update/train this policy
+    def update(self, observations, actions, **kwargs):
+        raise NotImplementedError
+
+    # This function defines the forward pass of the network.
+    # You can return anything you want, but you should be able to differentiate
+    # through it. For example, you can return a torch.FloatTensor. You can also
+    # return more flexible objects, such as a
+    # `torch.distributions.Distribution` object. It's up to you!
+    def forward(self, observation: torch.FloatTensor) -> Any:
+        if self.discrete:
+            return self.logits_na(observation)
+        else:
+            mean = self.mean_net(observation)
+            #print(len(mean))
+            # if self.logstd.grad and torch.zer:
+            #     print(self.logstd.grad)
+            #return mean  + distributions.normal.Normal(torch.zeros_like(mean), torch.ones_like(mean)).sample() * torch.exp(self.logstd)
+
+            return distributions.multivariate_normal.MultivariateNormal(mean, torch.diag(torch.exp(self.logstd))).rsample()
+
+
+    ####################################
+    ####################################
 
 
 #####################################################
@@ -116,19 +131,13 @@ class MLPPolicy(BasePolicy, nn.Module, metaclass=abc.ABCMeta):
 
 
 class MLPPolicyAC(MLPPolicy):
-    def update(self, observations, actions, adv_n=None):
-        # observations = ptu.from_numpy(observations)
-        # actions = ptu.from_numpy(actions)
-        # advantages = ptu.from_numpy(adv_n)
+    # MJ: cut acs_labels_na and qvals from the signature if they are not used
+    def update(
+            self, observations, actions,
+            adv_n=None, acs_labels_na=None, qvals=None
+    ):
+        raise NotImplementedError
+        # Not needed for this homework
 
-        actions_log_prob = self(observations).log_prob(actions)
-        loss = -torch.sum(actions_log_prob * adv_n) # why are we taking a cross entropy here? I guess this will select only the actions taken by the policy which are the ones of maximal prob
-
-        # TODO: optimize `loss` using `self.optimizer`
-        # HINT: remember to `zero_grad` first
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-
-
-        return loss.item()
+    ####################################
+    ####################################

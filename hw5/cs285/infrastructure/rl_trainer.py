@@ -3,22 +3,25 @@ import pickle
 import os
 import sys
 import time
+import pdb
 
 import gym
 from gym import wrappers
 import numpy as np
 import torch
-
-from cs285.agents.mb_agent import MBAgent
 from cs285.infrastructure import pytorch_util as ptu
+
 from cs285.infrastructure import utils
 from cs285.infrastructure.logger import Logger
 
-# register all of our envs
-from cs285.envs import register_envs
+from cs285.agents.explore_or_exploit_agent import ExplorationOrExploitationAgent
+from cs285.infrastructure.dqn_utils import (
+        get_wrapper_by_name,
+        register_custom_envs,
+)
 
-register_envs()
-
+#register all of our envs
+import cs285.envs
 
 # how many rollouts to save as videos to tensorboard
 MAX_NVIDEO = 2
@@ -34,12 +37,6 @@ class RL_Trainer(object):
         #############
 
         # Get params, create logger
-        if params['env_name']=='reacher-cs285-v0':
-            params['ep_len']=200
-        if params['env_name']=='cheetah-cs285-v0':
-            params['ep_len']=500
-        if params['env_name']=='obstacles-cs285-v0':
-            params['ep_len']=100
         self.params = params
         self.logger = Logger(self.params['logdir'])
 
@@ -57,24 +54,30 @@ class RL_Trainer(object):
         #############
 
         # Make the gym environment
+        register_custom_envs()
         self.env = gym.make(self.params['env_name'])
+        self.eval_env = gym.make(self.params['env_name'])
+        if not ('pointmass' in self.params['env_name']):
+            import matplotlib
+            matplotlib.use('Agg')
+            self.env.set_logdir(self.params['logdir'] + '/expl_')
+            self.eval_env.set_logdir(self.params['logdir'] + '/eval_')
+            
         if 'env_wrappers' in self.params:
             # These operations are currently only for Atari envs
             self.env = wrappers.Monitor(self.env, os.path.join(self.params['logdir'], "gym"), force=True)
+            self.eval_env = wrappers.Monitor(self.eval_env, os.path.join(self.params['logdir'], "gym"), force=True)
             self.env = params['env_wrappers'](self.env)
+            self.eval_env = params['env_wrappers'](self.eval_env)
             self.mean_episode_reward = -float('nan')
             self.best_mean_episode_reward = -float('inf')
         if 'non_atari_colab_env' in self.params and self.params['video_log_freq'] > 0:
-            self.env = wrappers.Monitor(self.env, os.path.join(self.params['logdir'], "gym"), force=True)
+            self.env = wrappers.Monitor(self.env, os.path.join(self.params['logdir'], "gym"), write_upon_reset=True)#, force=True)
+            self.eval_env = wrappers.Monitor(self.eval_env, os.path.join(self.params['logdir'], "gym"), write_upon_reset=True)
             self.mean_episode_reward = -float('nan')
             self.best_mean_episode_reward = -float('inf')
-
         self.env.seed(seed)
-
-        # import plotting (locally if 'obstacles' env)
-        if not(self.params['env_name']=='obstacles-cs285-v0'):
-            import matplotlib
-            matplotlib.use('Agg')
+        self.eval_env.seed(seed)
 
         # Maximum length for episodes
         self.params['ep_len'] = self.params['ep_len'] or self.env.spec.max_episode_steps
@@ -114,19 +117,24 @@ class RL_Trainer(object):
         self.agent = agent_class(self.env, self.params['agent_params'])
 
     def run_training_loop(self, n_iter, collect_policy, eval_policy,
-                          initial_expertdata=None):
+                          buffer_name=None,
+                          initial_expertdata=None, relabel_with_expert=False,
+                          start_relabel_with_expert=1, expert_policy=None):
         """
         :param n_iter:  number of (dagger) iterations
         :param collect_policy:
         :param eval_policy:
         :param initial_expertdata:
+        :param relabel_with_expert:  whether to perform dagger
+        :param start_relabel_with_expert: iteration at which to start relabel with expert
+        :param expert_policy:
         """
 
         # init vars at beginning of training
         self.total_envsteps = 0
         self.start_time = time.time()
 
-        print_period = 1
+        print_period = 1000 if isinstance(self.agent, ExplorationOrExploitationAgent) else 1
 
         for itr in range(n_iter):
             if itr % print_period == 0:
@@ -146,36 +154,51 @@ class RL_Trainer(object):
             else:
                 self.logmetrics = False
 
-            use_batchsize = self.params['batch_size']
-            if itr == 0:
-                use_batchsize = self.params['batch_size_initial']
-            paths, envsteps_this_batch, train_video_paths = (
-                self.collect_training_trajectories(
-                    itr, initial_expertdata, collect_policy, use_batchsize)
-            )
+            # collect trajectories, to be used for training
+            if isinstance(self.agent, ExplorationOrExploitationAgent):
+                self.agent.step_env()
+                envsteps_this_batch = 1
+                train_video_paths = None
+                paths = None
+            else:
+                use_batchsize = self.params['batch_size']
+                if itr==0:
+                    use_batchsize = self.params['batch_size_initial']
+                paths, envsteps_this_batch, train_video_paths = (
+                    self.collect_training_trajectories(
+                        itr, initial_expertdata, collect_policy, use_batchsize)
+                )
 
-            self.total_envsteps += envsteps_this_batch
+            
+            if (not self.agent.offline_exploitation) or (self.agent.t <= self.agent.num_exploration_steps):
+                self.total_envsteps += envsteps_this_batch
+
+            # relabel the collected obs with actions from a provided expert policy
+            if relabel_with_expert and itr>=start_relabel_with_expert:
+                paths = self.do_relabel_with_expert(expert_policy, paths)
 
             # add collected data to replay buffer
-            if isinstance(self.agent, MBAgent):
-                self.agent.add_to_replay_buffer(paths, self.params['add_sl_noise'])
-            else:
-                self.agent.add_to_replay_buffer(paths)
+            if isinstance(self.agent, ExplorationOrExploitationAgent):
+                if (not self.agent.offline_exploitation) or (self.agent.t <= self.agent.num_exploration_steps):
+                    self.agent.add_to_replay_buffer(paths)
 
             # train agent (using sampled data from replay buffer)
             if itr % print_period == 0:
                 print("\nTraining agent...")
             all_logs = self.train_agent()
 
-            # if there is a model, log model predictions
-            if isinstance(self.agent, MBAgent) and itr == 0:
-                self.log_model_predictions(itr, all_logs)
+            # Log densities and output trajectories
+            if isinstance(self.agent, ExplorationOrExploitationAgent) and (itr % print_period == 0):
+                self.dump_density_graphs(itr)
 
             # log/save
             if self.logvideo or self.logmetrics:
                 # perform logging
                 print('\nBeginning logging procedure...')
-                self.perform_logging(itr, paths, eval_policy, train_video_paths, all_logs)
+                if isinstance(self.agent, ExplorationOrExploitationAgent):
+                    self.perform_dqn_logging(all_logs)
+                else:
+                    self.perform_logging(itr, paths, eval_policy, train_video_paths, all_logs)
 
                 if self.params['save_params']:
                     self.agent.save('{}/agent_itr_{}.pt'.format(self.params['logdir'], itr))
@@ -207,6 +230,10 @@ class RL_Trainer(object):
 
         return paths, envsteps_this_batch, train_video_paths
 
+
+    ####################################
+    ####################################
+
     def train_agent(self):
         all_logs = []
         for train_step in range(self.params['num_agent_train_steps_per_iter']):
@@ -215,9 +242,65 @@ class RL_Trainer(object):
             all_logs.append(train_log)
         return all_logs
 
+    ####################################
+    ####################################
+
+    def do_relabel_with_expert(self, expert_policy, paths):
+        raise NotImplementedError
+        # get this from hw1 or hw2 or ignore it b/c it's not used for this hw
 
     ####################################
     ####################################
+    
+    def perform_dqn_logging(self, all_logs):
+        last_log = all_logs[-1]
+
+        episode_rewards = get_wrapper_by_name(self.env, "Monitor").get_episode_rewards()
+        if len(episode_rewards) > 0:
+            self.mean_episode_reward = np.mean(episode_rewards[-100:])
+        if len(episode_rewards) > 100:
+            self.best_mean_episode_reward = max(self.best_mean_episode_reward, self.mean_episode_reward)
+
+        logs = OrderedDict()
+
+        logs["Train_EnvstepsSoFar"] = self.agent.t
+        print("Timestep %d" % (self.agent.t,))
+        if self.mean_episode_reward > -5000:
+            logs["Train_AverageReturn"] = np.mean(self.mean_episode_reward)
+        print("mean reward (100 episodes) %f" % self.mean_episode_reward)
+        if self.best_mean_episode_reward > -5000:
+            logs["Train_BestReturn"] = np.mean(self.best_mean_episode_reward)
+        print("best mean reward %f" % self.best_mean_episode_reward)
+
+        if self.start_time is not None:
+            time_since_start = (time.time() - self.start_time)
+            print("running time %f" % time_since_start)
+            logs["TimeSinceStart"] = time_since_start
+
+        logs.update(last_log)
+        
+        eval_paths, eval_envsteps_this_batch = utils.sample_trajectories(self.eval_env, self.agent.eval_policy, self.params['eval_batch_size'], self.params['ep_len'])
+        
+        eval_returns = [eval_path["reward"].sum() for eval_path in eval_paths]
+        eval_ep_lens = [len(eval_path["reward"]) for eval_path in eval_paths]
+
+        logs["Eval_AverageReturn"] = np.mean(eval_returns)
+        logs["Eval_StdReturn"] = np.std(eval_returns)
+        logs["Eval_MaxReturn"] = np.max(eval_returns)
+        logs["Eval_MinReturn"] = np.min(eval_returns)
+        logs["Eval_AverageEpLen"] = np.mean(eval_ep_lens)
+        
+        logs['Buffer size'] = self.agent.replay_buffer.num_in_buffer
+
+        sys.stdout.flush()
+
+        for key, value in logs.items():
+            print('{} : {}'.format(key, value))
+            self.logger.log_scalar(value, key, self.agent.t)
+        print('Done logging...\n\n')
+
+        self.logger.flush()
+
     def perform_logging(self, itr, paths, eval_policy, train_video_paths, all_logs):
 
         last_log = all_logs[-1]
@@ -238,7 +321,7 @@ class RL_Trainer(object):
             self.logger.log_paths_as_videos(train_video_paths, itr, fps=self.fps, max_videos_to_save=MAX_NVIDEO,
                                             video_title='train_rollouts')
             self.logger.log_paths_as_videos(eval_video_paths, itr, fps=self.fps,max_videos_to_save=MAX_NVIDEO,
-                                            video_title='eval_rollouts')
+                                             video_title='eval_rollouts')
 
         #######################
 
@@ -277,40 +360,51 @@ class RL_Trainer(object):
             # perform the logging
             for key, value in logs.items():
                 print('{} : {}'.format(key, value))
-                self.logger.log_scalar(value, key, itr)
+                try:
+                    self.logger.log_scalar(value, key, itr)
+                except:
+                    pdb.set_trace()
             print('Done logging...\n\n')
 
             self.logger.flush()
 
-    def log_model_predictions(self, itr, all_logs):
-        # model predictions
-
+    def dump_density_graphs(self, itr):
         import matplotlib.pyplot as plt
         self.fig = plt.figure()
+        filepath = lambda name: self.params['logdir']+'/curr_{}.png'.format(name)
 
-        # sample actions
-        action_sequence = self.agent.actor.sample_action_sequences(num_sequences=1, horizon=10) #20 reacher
-        action_sequence = action_sequence[0]
+        num_states = self.agent.replay_buffer.num_in_buffer - 2
+        states = self.agent.replay_buffer.obs[:num_states]
+        if num_states <= 0: return
+        
+        H, xedges, yedges = np.histogram2d(states[:,0], states[:,1], range=[[0., 1.], [0., 1.]], density=True)
+        plt.imshow(np.rot90(H), interpolation='bicubic')
+        plt.colorbar()
+        plt.title('State Density')
+        self.fig.savefig(filepath('state_density'), bbox_inches='tight')
 
-        # calculate and log model prediction error
-        mpe, true_states, pred_states = utils.calculate_mean_prediction_error(self.env, action_sequence, self.agent.dyn_models, self.agent.actor.data_statistics)
-        assert self.params['agent_params']['ob_dim'] == true_states.shape[1] == pred_states.shape[1]
-        ob_dim = self.params['agent_params']['ob_dim']
-        ob_dim = 2*int(ob_dim/2.0) ## skip last state for plotting when state dim is odd
+        plt.clf()
+        ii, jj = np.meshgrid(np.linspace(0, 1), np.linspace(0, 1))
+        obs = np.stack([ii.flatten(), jj.flatten()], axis=1)
+        density = self.agent.exploration_model.forward_np(obs)
+        density = density.reshape(ii.shape)
+        plt.imshow(density[::-1])
+        plt.colorbar()
+        plt.title('RND Value')
+        self.fig.savefig(filepath('rnd_value'), bbox_inches='tight')
 
-        # plot the predictions
-        self.fig.clf()
-        for i in range(ob_dim):
-            plt.subplot(ob_dim/2, 2, i+1)
-            plt.plot(true_states[:,i], 'g')
-            plt.plot(pred_states[:,i], 'r')
-        self.fig.suptitle('MPE: ' + str(mpe))
-        self.fig.savefig(self.params['logdir']+'/itr_'+str(itr)+'_predictions.png', dpi=200, bbox_inches='tight')
+        plt.clf()
+        exploitation_values = self.agent.exploitation_critic.qa_values(obs).mean(-1)
+        exploitation_values = exploitation_values.reshape(ii.shape)
+        plt.imshow(exploitation_values[::-1])
+        plt.colorbar()
+        plt.title('Predicted Exploitation Value')
+        self.fig.savefig(filepath('exploitation_value'), bbox_inches='tight')
 
-        # plot all intermediate losses during this iteration
-        all_losses = np.array([log['Training Loss'] for log in all_logs])
-        np.save(self.params['logdir']+'/itr_'+str(itr)+'_losses.npy', all_losses)
-        self.fig.clf()
-        plt.plot(all_losses)
-        self.fig.savefig(self.params['logdir']+'/itr_'+str(itr)+'_losses.png', dpi=200, bbox_inches='tight')
-
+        plt.clf()
+        exploration_values = self.agent.exploration_critic.qa_values(obs).mean(-1)
+        exploration_values = exploration_values.reshape(ii.shape)
+        plt.imshow(exploration_values[::-1])
+        plt.colorbar()
+        plt.title('Predicted Exploration Value')
+        self.fig.savefig(filepath('exploration_value'), bbox_inches='tight')

@@ -24,6 +24,7 @@ class RL_Trainer(object):
 
         # Get params, create logger, create TF session
         self.params = params
+       
         self.logger = Logger(self.params['logdir'])
 
         # Set random seeds
