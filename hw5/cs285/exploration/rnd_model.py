@@ -3,7 +3,7 @@ from .base_exploration_model import BaseExplorationModel
 import torch.optim as optim
 from torch import nn
 import torch
-import torch.nn.functionals as F
+import torch.nn.functional as F
 
 def init_method_1(model):
     model.weight.data.uniform_()
@@ -62,8 +62,9 @@ class RNDModel(nn.Module, BaseExplorationModel):
     def forward(self, ob_no):
         # TODO: Get the prediction error for ob_no
         # HINT: Remember to detach the output of self.f!
-        
-        error = torch.norm(self.f_hat(ob_no) - self.f(ob_no).detach())
+        #print("RND model, forward line 65", ob_no.shape, ob_no)
+        #print(torch.norm(self.f_hat(ob_no) - self.f(ob_no).detach()).shape, torch.norm(self.f_hat(ob_no) - self.f(ob_no).detach()))
+        error = torch.norm(self.f_hat(ob_no) - self.f(ob_no).detach(), dim=1)
         return error
 
     def forward_np(self, ob_no):
@@ -74,7 +75,8 @@ class RNDModel(nn.Module, BaseExplorationModel):
     def update(self, ob_no):
         # TODO: Update f_hat using ob_no
         # Hint: Take the mean prediction error across the batch
-        loss = F.mse_loss(self(ob_no), dim=0)
+        ob_no = ptu.from_numpy(ob_no)
+        loss = torch.mean(self(ob_no) ** 2)
         loss.backward()
         self.optimizer.step()
         self.optimizer.zero_grad()

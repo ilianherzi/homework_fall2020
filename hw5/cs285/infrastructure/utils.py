@@ -73,8 +73,11 @@ def sample_trajectory(env, policy, max_path_length, render=False, render_mode=('
                 time.sleep(env.model.opt.timestep)
         obs.append(ob)
         ac = policy.get_action(ob)
+        # print(f"ob is {ob} ac is {ac}:{type(ac)}")
         #ac = ac[0]
+        ac = int(ac)
         acs.append(ac)
+        #print("actions are ", acs)
         ob, rew, done, _ = env.step(ac)
         # add the observation after taking a step to next_obs
         next_obs.append(ob)

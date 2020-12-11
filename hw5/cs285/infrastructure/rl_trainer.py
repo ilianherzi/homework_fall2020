@@ -278,7 +278,8 @@ class RL_Trainer(object):
             logs["TimeSinceStart"] = time_since_start
 
         logs.update(last_log)
-        
+        print("EVAL POLICY IS ", self.agent.eval_policy)
+
         eval_paths, eval_envsteps_this_batch = utils.sample_trajectories(self.eval_env, self.agent.eval_policy, self.params['eval_batch_size'], self.params['ep_len'])
         
         eval_returns = [eval_path["reward"].sum() for eval_path in eval_paths]
@@ -387,6 +388,7 @@ class RL_Trainer(object):
         ii, jj = np.meshgrid(np.linspace(0, 1), np.linspace(0, 1))
         obs = np.stack([ii.flatten(), jj.flatten()], axis=1)
         density = self.agent.exploration_model.forward_np(obs)
+        
         density = density.reshape(ii.shape)
         plt.imshow(density[::-1])
         plt.colorbar()

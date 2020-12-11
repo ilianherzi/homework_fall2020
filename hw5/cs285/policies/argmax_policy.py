@@ -18,7 +18,8 @@ class ArgMaxPolicy(object):
             observation = obs[None]
 
         actions = np.argmax(self.critic.qa_values(observation), axis=1)
-        return actions.squeeze()
+        #print("argmax policy" , actions.squeeze(), type(actions.squeeze()))
+        return int(actions.squeeze())
         # TODO: get this from hw3
 
     ####################################
