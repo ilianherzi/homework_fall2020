@@ -64,7 +64,7 @@ class RNDModel(nn.Module, BaseExplorationModel):
         # HINT: Remember to detach the output of self.f!
         #print("RND model, forward line 65", ob_no.shape, ob_no)
         #print(torch.norm(self.f_hat(ob_no) - self.f(ob_no).detach()).shape, torch.norm(self.f_hat(ob_no) - self.f(ob_no).detach()))
-        error = torch.norm(self.f_hat(ob_no) - self.f(ob_no).detach(), dim=1)
+        error = torch.norm(self.f_hat(ob_no) - self.f(ob_no).detach(),dim=1)
         return error
 
     def forward_np(self, ob_no):
@@ -76,6 +76,7 @@ class RNDModel(nn.Module, BaseExplorationModel):
         # TODO: Update f_hat using ob_no
         # Hint: Take the mean prediction error across the batch
         ob_no = ptu.from_numpy(ob_no)
+
         loss = torch.mean(self(ob_no) ** 2)
         loss.backward()
         self.optimizer.step()

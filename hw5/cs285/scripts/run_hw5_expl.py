@@ -52,7 +52,6 @@ def main():
     parser.add_argument('--batch_size', type=int, default=256)
 
     parser.add_argument('--use_rnd', action='store_true')
-    parser.add_argument('--use_cm', action='store_true')
     parser.add_argument('--num_exploration_steps', type=int, default=10000)
     parser.add_argument('--unsupervised_exploration', action='store_true')
 
@@ -65,11 +64,6 @@ def main():
     parser.add_argument('--rnd_output_size', type=int, default=5)
     parser.add_argument('--rnd_n_layers', type=int, default=2)
     parser.add_argument('--rnd_size', type=int, default=400)
-    
-    parser.add_argument('--cm_output_size', type=int, default=5)
-    parser.add_argument('--cm_n_layers', type=int, default=3)
-    parser.add_argument('--cm_size', type=int, default=400)
-    parser.add_argument('--cm_alpha', type=float, default=.7)
 
     parser.add_argument('--seed', type=int, default=2)
     parser.add_argument('--no_gpu', '-ngpu', action='store_true')
@@ -111,7 +105,7 @@ def main():
         params['explore_weight_schedule'] = ConstantSchedule(1.0)
         params['exploit_weight_schedule'] = ConstantSchedule(0.0)
         
-        if not params['use_rnd'] or not params['use_cm']:
+        if not params['use_rnd']:
             params['learning_starts'] = params['num_exploration_steps']
     
 
